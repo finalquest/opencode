@@ -1,6 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer } from "effect"
+import { registerDisposer } from "../../src/effect/instance-registry"
 import { Instance } from "../../src/project/instance"
 import { InstanceStore } from "../../src/project/instance-store"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -64,6 +65,153 @@ describe("InstanceStore", () => {
 
       expect(second).toBe(first)
       expect(initialized).toBe(1)
+    }),
+  )
+
+  it.live("dedupes concurrent loads while init is in flight", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const started = Promise.withResolvers<void>()
+      const release = Promise.withResolvers<void>()
+      let initialized = 0
+
+      const first = yield* store
+        .load({
+          directory: dir,
+          init: async () => {
+            initialized++
+            started.resolve()
+            await release.promise
+          },
+        })
+        .pipe(Effect.forkScoped)
+
+      yield* Effect.promise(() => started.promise)
+
+      const second = yield* store
+        .load({
+          directory: dir,
+          init: async () => {
+            initialized++
+          },
+        })
+        .pipe(Effect.forkScoped)
+
+      expect(initialized).toBe(1)
+      release.resolve()
+
+      const [firstCtx, secondCtx] = yield* Effect.all([Fiber.join(first), Fiber.join(second)])
+      expect(secondCtx).toBe(firstCtx)
+      expect(initialized).toBe(1)
+    }),
+  )
+
+  it.live("removes failed loads from the cache", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      let attempts = 0
+
+      const failed = yield* store
+        .load({
+          directory: dir,
+          init: async () => {
+            attempts++
+            throw new Error("init failed")
+          },
+        })
+        .pipe(
+          Effect.as(false),
+          Effect.catchCause(() => Effect.succeed(true)),
+        )
+
+      expect(failed).toBe(true)
+
+      const ctx = yield* store.load({
+        directory: dir,
+        init: async () => {
+          attempts++
+        },
+      })
+
+      expect(ctx.directory).toBe(dir)
+      expect(attempts).toBe(2)
+    }),
+  )
+
+  it.live("reload replaces the cached context", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+
+      const first = yield* store.load({ directory: dir })
+      const second = yield* store.reload({ directory: dir })
+      const cached = yield* store.load({ directory: dir })
+
+      expect(second).not.toBe(first)
+      expect(cached).toBe(second)
+    }),
+  )
+
+  it.live("stale dispose does not delete an in-flight reload", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const reloading = Promise.withResolvers<void>()
+      const releaseReload = Promise.withResolvers<void>()
+      const disposed: Array<string> = []
+      const off = registerDisposer(async (directory) => {
+        disposed.push(directory)
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(off))
+
+      const first = yield* store.load({ directory: dir })
+      const reload = yield* store
+        .reload({
+          directory: dir,
+          init: async () => {
+            reloading.resolve()
+            await releaseReload.promise
+          },
+        })
+        .pipe(Effect.forkScoped)
+
+      yield* Effect.promise(() => reloading.promise)
+      const staleDispose = yield* store.dispose(first).pipe(Effect.forkScoped)
+      releaseReload.resolve()
+
+      const second = yield* Fiber.join(reload)
+      yield* Fiber.join(staleDispose)
+
+      expect(disposed).toEqual([dir])
+      expect(yield* store.load({ directory: dir })).toBe(second)
+    }),
+  )
+
+  it.live("dedupes concurrent disposeAll calls", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const disposing = Promise.withResolvers<void>()
+      const releaseDispose = Promise.withResolvers<void>()
+      const disposed: Array<string> = []
+      const off = registerDisposer(async (directory) => {
+        disposed.push(directory)
+        disposing.resolve()
+        await releaseDispose.promise
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(off))
+
+      yield* store.load({ directory: dir })
+      const first = yield* store.disposeAll().pipe(Effect.forkScoped)
+      yield* Effect.promise(() => disposing.promise)
+      const second = yield* store.disposeAll().pipe(Effect.forkScoped)
+
+      expect(disposed).toEqual([dir])
+      releaseDispose.resolve()
+      yield* Effect.all([Fiber.join(first), Fiber.join(second)])
+      expect(disposed).toEqual([dir])
     }),
   )
 
