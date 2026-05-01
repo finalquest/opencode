@@ -3,7 +3,6 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import type { InstanceContext } from "@/project/instance"
 import { InstanceStore } from "@/project/instance-store"
-import { Filesystem } from "@/util/filesystem"
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
@@ -29,7 +28,7 @@ function makeInstanceContext(
   directory: string,
 ): Effect.Effect<InstanceContext> {
   return store.load({
-    directory: Filesystem.resolve(decode(directory)),
+    directory: decode(directory),
     init: () => AppRuntime.runPromise(InstanceBootstrap),
   })
 }
