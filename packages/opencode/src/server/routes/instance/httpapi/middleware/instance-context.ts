@@ -1,9 +1,9 @@
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceBootstrap } from "@/project/bootstrap"
-import { InstanceStore, type InstanceContext, type Store } from "@/project/instance"
+import { InstanceStore, type InstanceContext } from "@/project/instance"
 import { Filesystem } from "@/util/filesystem"
-import { Effect, Layer } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import { WorkspaceRouteContext } from "./workspace-routing"
@@ -23,7 +23,10 @@ function decode(input: string): string {
   }
 }
 
-function makeInstanceContext(store: Store, directory: string): Effect.Effect<InstanceContext> {
+function makeInstanceContext(
+  store: Context.Service.Shape<typeof InstanceStore>,
+  directory: string,
+): Effect.Effect<InstanceContext> {
   return store.load({
     directory: Filesystem.resolve(decode(directory)),
     init: () => AppRuntime.runPromise(InstanceBootstrap),
@@ -32,7 +35,7 @@ function makeInstanceContext(store: Store, directory: string): Effect.Effect<Ins
 
 function provideInstanceContext<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E>,
-  store: Store,
+  store: Context.Service.Shape<typeof InstanceStore>,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext

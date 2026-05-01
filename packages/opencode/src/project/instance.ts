@@ -24,14 +24,14 @@ export interface LoadInput {
   project?: Project.Info
 }
 
-export interface Store {
+export interface Interface {
   readonly load: (input: LoadInput) => Effect.Effect<InstanceContext>
   readonly reload: (input: LoadInput) => Effect.Effect<InstanceContext>
   readonly dispose: (ctx: InstanceContext) => Effect.Effect<void>
   readonly disposeAll: () => Effect.Effect<void>
 }
 
-export class InstanceStore extends Context.Service<InstanceStore, Store>()("@opencode/InstanceStore") {}
+export class InstanceStore extends Context.Service<InstanceStore, Interface>()("@opencode/InstanceStore") {}
 
 export const instanceStoreLayer: Layer.Layer<InstanceStore, never, Project.Service> = Layer.effect(
   InstanceStore,
