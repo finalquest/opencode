@@ -1,9 +1,10 @@
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceBootstrap } from "@/project/bootstrap"
-import { InstanceStore, type InstanceContext } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance"
+import { InstanceStore } from "@/project/instance-store"
 import { Filesystem } from "@/util/filesystem"
-import { Context, Effect, Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import { WorkspaceRouteContext } from "./workspace-routing"
@@ -24,7 +25,7 @@ function decode(input: string): string {
 }
 
 function makeInstanceContext(
-  store: Context.Service.Shape<typeof InstanceStore>,
+  store: InstanceStore.Interface,
   directory: string,
 ): Effect.Effect<InstanceContext> {
   return store.load({
@@ -35,7 +36,7 @@ function makeInstanceContext(
 
 function provideInstanceContext<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E>,
-  store: Context.Service.Shape<typeof InstanceStore>,
+  store: InstanceStore.Interface,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext
@@ -50,14 +51,14 @@ function provideInstanceContext<E>(
 export const instanceContextLayer = Layer.effect(
   InstanceContextMiddleware,
   Effect.gen(function* () {
-    const store = yield* InstanceStore
+    const store = yield* InstanceStore.Service
     return InstanceContextMiddleware.of((effect) => provideInstanceContext(effect, store))
   }),
 )
 
 export const instanceRouterMiddleware = HttpRouter.middleware()(
   Effect.gen(function* () {
-    const store = yield* InstanceStore
+    const store = yield* InstanceStore.Service
     return (effect) => provideInstanceContext(effect, store)
   }),
 )

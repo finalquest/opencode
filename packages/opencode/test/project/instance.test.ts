@@ -1,11 +1,12 @@
 import { afterEach, describe, expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Effect, Layer } from "effect"
-import { Instance, InstanceStore, instanceStoreDefaultLayer } from "../../src/project/instance"
+import { Instance } from "../../src/project/instance"
+import { InstanceStore } from "../../src/project/instance-store"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(instanceStoreDefaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(Layer.mergeAll(InstanceStore.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -15,7 +16,7 @@ describe("InstanceStore", () => {
   it.live("loads instance context without installing ALS for the caller", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const store = yield* InstanceStore
+      const store = yield* InstanceStore.Service
       const ctx = yield* store.load({ directory: dir })
 
       expect(ctx.directory).toBe(dir)
@@ -27,7 +28,7 @@ describe("InstanceStore", () => {
   it.live("runs load init inside the loaded legacy instance context", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const store = yield* InstanceStore
+      const store = yield* InstanceStore.Service
       let initializedDirectory: string | undefined
 
       yield* store.load({
@@ -45,7 +46,7 @@ describe("InstanceStore", () => {
   it.live("caches loaded instance context by directory", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const store = yield* InstanceStore
+      const store = yield* InstanceStore.Service
       let initialized = 0
 
       const first = yield* store.load({
