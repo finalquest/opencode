@@ -1,8 +1,7 @@
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceBootstrap } from "@/project/bootstrap"
-import { Instance } from "@/project/instance"
-import type { InstanceContext } from "@/project/instance"
+import { InstanceStore, type InstanceContext, type Store } from "@/project/instance"
 import { Filesystem } from "@/util/filesystem"
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
@@ -24,22 +23,20 @@ function decode(input: string): string {
   }
 }
 
-function makeInstanceContext(directory: string): Effect.Effect<InstanceContext> {
-  return Effect.promise(() =>
-    Instance.provide({
-      directory: Filesystem.resolve(decode(directory)),
-      init: () => AppRuntime.runPromise(InstanceBootstrap),
-      fn: () => Instance.current,
-    }),
-  )
+function makeInstanceContext(store: Store, directory: string): Effect.Effect<InstanceContext> {
+  return store.load({
+    directory: Filesystem.resolve(decode(directory)),
+    init: () => AppRuntime.runPromise(InstanceBootstrap),
+  })
 }
 
 function provideInstanceContext<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E>,
+  store: Store,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext
-    const ctx = yield* makeInstanceContext(route.directory)
+    const ctx = yield* makeInstanceContext(store, route.directory)
     return yield* effect.pipe(
       Effect.provideService(InstanceRef, ctx),
       Effect.provideService(WorkspaceRef, route.workspaceID),
@@ -47,9 +44,17 @@ function provideInstanceContext<E>(
   })
 }
 
-export const instanceContextLayer = Layer.succeed(
+export const instanceContextLayer = Layer.effect(
   InstanceContextMiddleware,
-  InstanceContextMiddleware.of((effect) => provideInstanceContext(effect)),
+  Effect.gen(function* () {
+    const store = yield* InstanceStore
+    return InstanceContextMiddleware.of((effect) => provideInstanceContext(effect, store))
+  }),
 )
 
-export const instanceRouterMiddleware = HttpRouter.middleware()((effect) => provideInstanceContext(effect))
+export const instanceRouterMiddleware = HttpRouter.middleware()(
+  Effect.gen(function* () {
+    const store = yield* InstanceStore
+    return (effect) => provideInstanceContext(effect, store)
+  }),
+)
