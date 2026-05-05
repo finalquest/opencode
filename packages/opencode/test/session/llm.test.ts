@@ -6,6 +6,7 @@ import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@/provider/models"
@@ -493,7 +494,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -580,7 +581,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -670,7 +671,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -784,7 +785,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
@@ -900,7 +901,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
@@ -1019,7 +1020,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -1137,7 +1138,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
@@ -1378,7 +1379,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
