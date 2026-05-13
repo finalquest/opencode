@@ -626,53 +626,8 @@ it.instance(
         },
       },
     },
-<<<<<<< HEAD
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const providers = await list()
-      const model = providers[ProviderID.make("test-provider")].models["test-model"]
-      expect(model.cost.input).toBe(0)
-      expect(model.cost.output).toBe(0)
-      expect(model.cost.cache.read).toBe(0)
-      expect(model.cost.cache.write).toBe(0)
-    },
-  })
-})
-
-test("model options are merged from existing model", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              models: {
-                "claude-sonnet-4-20250514": {
-                  options: {
-                    customOption: "custom-value",
-                  },
-                },
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      set("ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list()
-      const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
-      expect(model.options.customOption).toBe("custom-value")
-    },
-  })
-})
+  },
+)
 
 test("model prompt is merged from config", async () => {
   await using tmp = await tmpdir({
@@ -734,36 +689,6 @@ test("model prompt supports file substitution", async () => {
     },
   })
 })
-
-test("provider removed when all models filtered out", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              whitelist: ["nonexistent-model"],
-            },
-          },
-        }),
-      )
-    },
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      set("ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list()
-      expect(providers[ProviderID.anthropic]).toBeUndefined()
-    },
-  })
-})
-=======
-  },
-)
->>>>>>> refs/remotes/origin/dev
 
 test("closest finds model by partial match", async () => {
   await using tmp = await tmpdir({
