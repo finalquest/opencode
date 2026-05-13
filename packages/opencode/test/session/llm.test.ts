@@ -352,7 +352,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
         const user = {
-          id: MessageID.make("user-model-prompt"),
+          id: MessageID.make("msg_user-model-prompt"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -430,7 +430,7 @@ describe("session.llm.stream", () => {
           prompt: "Use the agent prompt.",
         } satisfies Agent.Info
         const user = {
-          id: MessageID.make("user-agent-prompt"),
+          id: MessageID.make("msg_user-agent-prompt"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
