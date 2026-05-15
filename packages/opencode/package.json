@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.14.48",
+  "version": "1.15.0",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -32,11 +32,6 @@
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
-    },
-    "#httpapi-server": {
-      "bun": "./src/server/httpapi-server.node.ts",
-      "node": "./src/server/httpapi-server.node.ts",
-      "default": "./src/server/httpapi-server.node.ts"
     }
   },
   "devDependencies": {
@@ -91,7 +86,6 @@
     "@ai-sdk/openai-compatible": "2.0.41",
     "@ai-sdk/perplexity": "3.0.26",
     "@ai-sdk/provider": "3.0.8",
-    "@ai-sdk/provider-utils": "4.0.23",
     "@ai-sdk/togetherai": "2.0.41",
     "@ai-sdk/vercel": "2.0.39",
     "@ai-sdk/xai": "3.0.82",

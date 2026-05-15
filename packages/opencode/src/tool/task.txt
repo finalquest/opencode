@@ -1,4 +1,9 @@
 Launch a subagent for complex, multi-step work. Always set `subagent_type`.
+3. If OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS is enabled, background=true launches the subagent asynchronously. Use task_status(task_id=..., wait=false) to poll, or wait=true to block until done.
+4. Each agent invocation starts with a fresh context unless you provide task_id to resume the same subagent session (which continues with its previous messages and tool outputs). When starting fresh, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
+5. The agent's outputs should generally be trusted
+6. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent. Tell it how to verify its work if possible (e.g., relevant test commands).
+7. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
 
 # Use When
 - Executing a custom slash command: pass the slash command as the entire prompt.
