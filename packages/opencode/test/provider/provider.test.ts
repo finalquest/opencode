@@ -731,11 +731,11 @@ test("model prompt is merged from config", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      set("ANTHROPIC_API_KEY", "test-api-key")
-      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+    fn: async (ctx) => {
+      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"), ctx)
       expect(model.prompt).toBe("Use a concise local prompt.")
     },
   })
@@ -762,11 +762,11 @@ test("model prompt supports file substitution", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      set("ANTHROPIC_API_KEY", "test-api-key")
-      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+    fn: async (ctx) => {
+      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"), ctx)
       expect(model.prompt).toBe("Use prompt from file.")
     },
   })

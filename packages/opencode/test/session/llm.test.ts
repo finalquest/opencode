@@ -361,10 +361,10 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(fixture.model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(fixture.model.id), ctx)
         const sessionID = SessionID.make("session-model-prompt")
         const agent = {
           name: "test",
@@ -389,7 +389,7 @@ describe("session.llm.stream", () => {
           system: [],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
-        })
+        }, ctx)
 
         const body = (await request).body
         const messages = body.messages as Array<{ role: string; content: string }>
@@ -438,10 +438,10 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(fixture.model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(fixture.model.id), ctx)
         const sessionID = SessionID.make("session-agent-prompt")
         const agent = {
           name: "test",
@@ -467,7 +467,7 @@ describe("session.llm.stream", () => {
           system: [],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
-        })
+        }, ctx)
 
         const body = (await request).body
         const messages = body.messages as Array<{ role: string; content: string }>
