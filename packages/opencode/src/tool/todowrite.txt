@@ -22,6 +22,8 @@ Create and maintain a structured task list for the current coding session. Use i
 # Rules
 - Update status as work progresses.
 - Mark items complete immediately after finishing; do not batch completions.
+- Mark `completed` only after the required work is actually done, including any required verification. Never based on intent.
+- If blocked or partial, keep it `in_progress` and add a follow-up todo describing the blocker.
 - Complete the current item before starting another.
 - Break complex work into specific, actionable items.
 - Cancel tasks that become irrelevant.
