@@ -19,8 +19,8 @@ function flag(name: string) {
 }
 
 const branch = option("branch", "dev")
-const source = option("source", "origin")
-const target = option("target", "upstream")
+const source = option("source", "upstream")
+const target = option("target", "origin")
 const dryRun = flag("dry-run")
 
 console.log(`Syncing ${source}/${branch} -> ${target}/${branch}`)
