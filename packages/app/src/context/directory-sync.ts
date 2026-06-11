@@ -8,11 +8,11 @@ import {
   getSessionPrefetchPromise,
   setSessionPrefetch,
 } from "./global-sync/session-prefetch"
-import { createServerSyncContext, useServerSync } from "./server-sync"
-import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
-import { useServerSDK } from "./server-sdk"
+import { createServerSdkContext, useServerSDK } from "./server-sdk"
+import { type createServerSyncContextInner } from "./server-sync"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -33,6 +33,12 @@ function runInflight(map: Map<string, Promise<void>>, key: string, task: () => P
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
+const isNotFound = (error: unknown) =>
+  error instanceof Error &&
+  typeof error.cause === "object" &&
+  error.cause !== null &&
+  (error.cause as { status?: unknown }).status === 404
 
 function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   const map = new Map(a.map((item) => [item.id, item] as const))
@@ -165,14 +171,17 @@ function setOptimisticRemove(setStore: (...args: unknown[]) => void, input: Opti
   })
 }
 
-export const createDirSyncContext = (directory: string, serverSync: ReturnType<typeof createServerSyncContext>) => {
-  const serverSDK = useServerSDK()
+export const createDirSyncContext = (
+  directory: string,
+  serverSync: ReturnType<typeof createServerSyncContextInner>,
+  serverSDK: ReturnType<typeof createServerSdkContext> = useServerSDK(),
+) => {
   const client = serverSDK.createClient({ directory, throwOnError: true })
 
   type Child = ReturnType<(typeof serverSync)["child"]>
   type Setter = Child[1]
 
-  const current = createMemo(() => serverSync.child(directory))
+  const current = createMemo(() => serverSync.child(directory, { mcp: true }))
   const target = (directory?: string) => {
     if (!directory || directory === directory) return current()
     return serverSync.child(directory)
@@ -267,7 +276,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
 
   const evict = (directory: string, setStore: Setter, sessionIDs: string[]) => {
     if (sessionIDs.length === 0) return
-    clearSessionPrefetch(directory, sessionIDs)
+    clearSessionPrefetch(serverSDK.scope, directory, sessionIDs)
     for (const sessionID of sessionIDs) {
       serverSync.todo.set(sessionID, undefined)
     }
@@ -339,6 +348,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           setMeta("cursor", key, next.cursor)
           setMeta("complete", key, next.complete)
           setSessionPrefetch({
+            scope: serverSDK.scope,
             directory: input.directory,
             sessionID: input.sessionID,
             limit: message.length,
@@ -346,6 +356,10 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
             complete: next.complete,
           })
         })
+      })
+      .catch((error) => {
+        if (isNotFound(error) && !tracked(input.directory, input.sessionID)) return
+        throw error
       })
       .finally(() => {
         setMeta(
@@ -425,7 +439,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
 
         touch(directory, setStore, sessionID)
 
-        const seeded = getSessionPrefetch(directory, sessionID)
+        const seeded = getSessionPrefetch(serverSDK.scope, directory, sessionID)
         if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
           batch(() => {
             setMeta("limit", key, seeded.limit)
@@ -436,10 +450,10 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         }
 
         return runInflight(inflight, key, async () => {
-          const pending = getSessionPrefetchPromise(directory, sessionID)
+          const pending = getSessionPrefetchPromise(serverSDK.scope, directory, sessionID)
           if (pending) {
             await pending
-            const seeded = getSessionPrefetch(directory, sessionID)
+            const seeded = getSessionPrefetch(serverSDK.scope, directory, sessionID)
             if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
               batch(() => {
                 setMeta("limit", key, seeded.limit)
@@ -458,22 +472,27 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           const sessionReq =
             hasSession && !opts?.force
               ? Promise.resolve()
-              : retry(() => client.session.get({ sessionID })).then((session) => {
-                  if (!tracked(directory, sessionID)) return
-                  const data = session.data
-                  if (!data) return
-                  setStore(
-                    "session",
-                    produce((draft) => {
-                      const match = Binary.search(draft, sessionID, (s) => s.id)
-                      if (match.found) {
-                        draft[match.index] = data
-                        return
-                      }
-                      draft.splice(match.index, 0, data)
-                    }),
-                  )
-                })
+              : retry(() => client.session.get({ sessionID }))
+                  .then((session) => {
+                    if (!tracked(directory, sessionID)) return
+                    const data = session.data
+                    if (!data) return
+                    setStore(
+                      "session",
+                      produce((draft) => {
+                        const match = Binary.search(draft, sessionID, (s) => s.id)
+                        if (match.found) {
+                          draft[match.index] = data
+                          return
+                        }
+                        draft.splice(match.index, 0, data)
+                      }),
+                    )
+                  })
+                  .catch((error) => {
+                    if (isNotFound(error) && !tracked(directory, sessionID)) return
+                    throw error
+                  })
 
           const messagesReq =
             cached && !opts?.force
@@ -589,6 +608,9 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           }),
         )
       },
+    },
+    mcp: {
+      toggle: (name: string) => serverSync.mcp.toggle(directory, name),
     },
     absolute,
     get directory() {
