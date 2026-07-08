@@ -100,6 +100,7 @@ export const Info = Schema.Struct({
         title: Schema.optional(ConfigAgentV1.Info),
         summary: Schema.optional(ConfigAgentV1.Info),
         compaction: Schema.optional(ConfigAgentV1.Info),
+        advisor: Schema.optional(ConfigAgentV1.Info),
       }),
       [Schema.Record(Schema.String, ConfigAgentV1.Info)],
     ),
@@ -163,6 +164,25 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  advisor: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable the seek_advice tool (default: true)",
+      }),
+      model: Schema.optional(Schema.String).annotate({
+        description: "Advisor model in provider/model format, eg anthropic/claude-sonnet-4",
+      }),
+      temperature: Schema.optional(Schema.Finite).annotate({
+        description: "Sampling temperature for the advisor (default: 0.2)",
+      }),
+      max_calls_per_session: Schema.optional(PositiveInt).annotate({
+        description: "Maximum seek_advice calls per session (default: 10)",
+      }),
+      timeout: Schema.optional(PositiveInt).annotate({
+        description: "Timeout in milliseconds per advisor call (default: 60000)",
+      }),
+    }),
+  ).annotate({ description: "Advisor configuration for the seek_advice tool" }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

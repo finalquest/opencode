@@ -1,0 +1,16 @@
+Ask a stronger advisor model for a second opinion when you are uncertain or blocked.
+
+Use seek_advice when:
+- your confidence is low
+- there are multiple valid approaches and you must choose
+- an architecture decision is involved
+- debugging is inconclusive
+- you are reviewing risks before major edits
+
+Do NOT use seek_advice for:
+- trivial edits
+- reading files (use read)
+- running tests (use bash)
+- simple refactors
+
+The advisor can read and search the codebase but cannot edit, write, or run commands. It returns a structured recommendation (summary, recommendation, reasoning, risks, next_steps, confidence) — it does not do the work for you. You remain responsible for acting on the advice.
