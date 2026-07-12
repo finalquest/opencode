@@ -10,6 +10,8 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { SeekAdviceTool } from "./seek-advice"
+import { AnalyzeImageTool } from "./analyze-image"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -95,6 +97,8 @@ const layer = Layer.effect(
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
+    const seekadvice = yield* SeekAdviceTool
+    const analyzeimage = yield* AnalyzeImageTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
     const todo = yield* TodoWriteTool
@@ -210,6 +214,8 @@ const layer = Layer.effect(
           edit: Tool.init(edit),
           write: Tool.init(writetool),
           task: Tool.init(task),
+          seek_advice: Tool.init(seekadvice),
+          analyze_image: Tool.init(analyzeimage),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
@@ -233,6 +239,8 @@ const layer = Layer.effect(
             tool.edit,
             tool.write,
             tool.task,
+            tool.seek_advice,
+            tool.analyze_image,
             tool.fetch,
             tool.todo,
             tool.search,

@@ -100,6 +100,8 @@ export const Info = Schema.Struct({
         title: Schema.optional(ConfigAgentV1.Info),
         summary: Schema.optional(ConfigAgentV1.Info),
         compaction: Schema.optional(ConfigAgentV1.Info),
+        advisor: Schema.optional(ConfigAgentV1.Info),
+        image_analyzer: Schema.optional(ConfigAgentV1.Info),
       }),
       [Schema.Record(Schema.String, ConfigAgentV1.Info)],
     ),
@@ -163,6 +165,50 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  advisor: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable the seek_advice tool (default: true)",
+      }),
+      model: Schema.optional(Schema.String).annotate({
+        description: "Advisor model in provider/model format, eg anthropic/claude-sonnet-4",
+      }),
+      variant: Schema.optional(Schema.String).annotate({
+        description: "Operation mode/variant for the advisor, eg low, medium, high",
+      }),
+      temperature: Schema.optional(Schema.Finite).annotate({
+        description: "Sampling temperature for the advisor (default: 0.2)",
+      }),
+      max_calls_per_session: Schema.optional(PositiveInt).annotate({
+        description: "Maximum seek_advice calls per session (default: 10)",
+      }),
+      timeout: Schema.optional(PositiveInt).annotate({
+        description: "Timeout in milliseconds per advisor call (default: 60000)",
+      }),
+    }),
+  ).annotate({ description: "Advisor configuration for the seek_advice tool" }),
+  image_analyzer: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable the analyze_image tool (default: true)",
+      }),
+      model: Schema.optional(Schema.String).annotate({
+        description: "Vision-capable model in provider/model format, eg anthropic/claude-sonnet-4",
+      }),
+      variant: Schema.optional(Schema.String).annotate({
+        description: "Operation mode/variant for the image analyzer, eg low, medium, high",
+      }),
+      temperature: Schema.optional(Schema.Finite).annotate({
+        description: "Sampling temperature for the image analyzer (default: 0.3)",
+      }),
+      max_calls_per_session: Schema.optional(PositiveInt).annotate({
+        description: "Maximum analyze_image calls per session (default: 10)",
+      }),
+      timeout: Schema.optional(PositiveInt).annotate({
+        description: "Timeout in milliseconds per image analysis call (default: 60000)",
+      }),
+    }),
+  ).annotate({ description: "Image analyzer configuration for the analyze_image tool" }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
