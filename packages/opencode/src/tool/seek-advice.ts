@@ -9,11 +9,16 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { TaskPromptOps } from "./task"
 import { Config } from "@/config/config"
-import { parseModel } from "@/provider/provider"
-import { Effect, Schema } from "effect"
+import { parseModel, Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
+import { Auth } from "@/auth"
+import { Effect, Schema, Exit } from "effect"
+import * as Option from "effect/Option"
 import * as Duration from "effect/Duration"
 import { EffectBridge } from "@/effect/bridge"
 import { Database } from "@opencode-ai/core/database/database"
+import { generateObject, streamObject, type ModelMessage } from "ai"
+import PROMPT_ADVISOR from "../agent/prompt/advisor.txt"
 
 const id = "seek_advice"
 
@@ -58,7 +63,14 @@ const AdviceOutput = Schema.Struct({
   confidence: Confidence,
 })
 
+type AdviceOutputType = Schema.Schema.Type<typeof AdviceOutput>
+
 const decodeAdvice = Schema.decodeUnknownEffect(AdviceOutput)
+
+const adviceSchema = Object.assign(
+  Schema.toStandardSchemaV1(AdviceOutput),
+  Schema.toStandardJSONSchemaV1(AdviceOutput),
+)
 
 const DEFAULT_MAX_CALLS = 10
 const DEFAULT_TIMEOUT_MS = 60_000
@@ -107,14 +119,26 @@ function buildPrompt(input: Schema.Schema.Type<typeof Parameters>, transcript: s
 
 function extractJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const candidate = fenced ? fenced[1] : text
-  const start = candidate.lastIndexOf("{")
-  const end = candidate.indexOf("}", start)
-  if (start === -1 || end === -1) return JSON.parse(candidate.trim())
+  const candidate = (fenced ? fenced[1] : text).trim()
+  try {
+    return JSON.parse(candidate)
+  } catch {}
+  const start = candidate.indexOf("{")
+  if (start === -1) return JSON.parse(candidate)
+  let depth = 0
+  let end = start
+  for (let i = start; i < candidate.length; i++) {
+    if (candidate[i] === "{") depth++
+    else if (candidate[i] === "}") depth--
+    if (depth === 0) {
+      end = i
+      break
+    }
+  }
   return JSON.parse(candidate.slice(start, end + 1))
 }
 
-function renderAdvice(output: Schema.Schema.Type<typeof AdviceOutput>): string {
+function renderAdvice(output: AdviceOutputType): string {
   return [
     `<advice confidence="${output.confidence}">`,
     `<summary>${output.summary}</summary>`,
@@ -160,6 +184,95 @@ export const SeekAdviceTool = Tool.define(
       const next = yield* agent.get("advisor")
       if (!next) return yield* Effect.fail(new Error("advisor agent is not available"))
 
+      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.orDie,
+      )
+      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      const variant = msg.info.variant
+
+      const model = advisorCfg?.model
+        ? parseModel(advisorCfg.model)
+        : { modelID: msg.info.modelID, providerID: msg.info.providerID }
+
+      const baseMetadata = {
+        parentSessionId: ctx.sessionID,
+        model,
+        call: used + 1,
+      }
+
+      const timeoutMs = advisorCfg?.timeout ?? DEFAULT_TIMEOUT_MS
+      const transcript = renderConversation(ctx.messages)
+      const promptText = buildPrompt(params, transcript)
+
+      const tryStructured = Effect.gen(function* () {
+        const providerOpt = yield* Effect.serviceOption(Provider.Service)
+        if (Option.isNone(providerOpt)) return yield* Effect.fail(new Error("Provider.Service not available"))
+        const provider = providerOpt.value
+
+        const resolved = yield* provider.getModel(model.providerID, model.modelID).pipe(
+          Effect.mapError((err) => new Error(`Model not found: ${String(err)}`)),
+        )
+        const language = yield* provider.getLanguage(resolved).pipe(
+          Effect.mapError((err) => new Error(`Language model not available: ${String(err)}`)),
+        )
+
+        const authOpt = yield* Effect.serviceOption(Auth.Service)
+        const authInfo = Option.isSome(authOpt)
+          ? yield* authOpt.value.get(model.providerID).pipe(Effect.orElseSucceed(() => undefined))
+          : undefined
+        const isOpenaiOauth = model.providerID === "openai" && authInfo?.type === "oauth"
+
+        const messages: ModelMessage[] = [
+          ...(isOpenaiOauth
+            ? []
+            : [{ role: "system" as const, content: PROMPT_ADVISOR } satisfies ModelMessage]),
+          { role: "user" as const, content: promptText } satisfies ModelMessage,
+        ]
+
+        const genParams = {
+          temperature: advisorCfg?.temperature ?? 0.2,
+          messages,
+          model: language,
+          schema: adviceSchema,
+        } satisfies Parameters<typeof generateObject>[0]
+
+        if (isOpenaiOauth) {
+          return yield* Effect.promise(async () => {
+            const result = streamObject({
+              ...genParams,
+              providerOptions: ProviderTransform.providerOptions(resolved, {
+                instructions: PROMPT_ADVISOR,
+                store: false,
+              }),
+              onError: () => {},
+            })
+            for await (const part of result.fullStream) {
+              if (part.type === "error") throw part.error
+            }
+            return result.object
+          })
+        }
+
+        return yield* Effect.promise(() => generateObject(genParams).then((r) => r.object))
+      })
+
+      const structuredExit = yield* tryStructured.pipe(
+        Effect.timeout(Duration.millis(timeoutMs)),
+        Effect.exit,
+      )
+
+      if (Exit.isSuccess(structuredExit)) {
+        const advice = structuredExit.value
+        const metadata = { ...baseMetadata, path: "structured" }
+        yield* ctx.metadata({ title: params.question.slice(0, 80), metadata })
+        return {
+          title: params.question.slice(0, 80),
+          metadata,
+          output: renderAdvice(advice),
+        }
+      }
+
       const parent = yield* sessions.get(ctx.sessionID)
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],
@@ -185,44 +298,25 @@ export const SeekAdviceTool = Tool.define(
         ],
       })
 
-      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
-        Effect.provideService(Database.Service, database),
-        Effect.orDie,
-      )
-      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-      const variant = msg.info.variant
-
-      const model = advisorCfg?.model
-        ? parseModel(advisorCfg.model)
-        : { modelID: msg.info.modelID, providerID: msg.info.providerID }
-
-      const metadata = {
-        parentSessionId: ctx.sessionID,
-        sessionId: childSession.id,
-        model,
-        call: used + 1,
-      }
+      const metadata = { ...baseMetadata, sessionId: childSession.id, path: "fallback" }
       yield* ctx.metadata({ title: params.question.slice(0, 80), metadata })
 
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("SeekAdviceTool requires promptOps in ctx.extra"))
 
-      const transcript = renderConversation(ctx.messages)
-
       const runAdvice = Effect.fn("SeekAdviceTool.runAdvice")(function* () {
-        const parts = yield* ops.resolvePromptParts(buildPrompt(params, transcript))
+        const parts = yield* ops.resolvePromptParts(promptText)
         const result = yield* ops.prompt({
           messageID: MessageID.ascending(),
           sessionID: childSession.id,
           model: { modelID: model.modelID, providerID: model.providerID },
-          variant: advisorCfg?.model ? undefined : variant,
+          variant: advisorCfg?.variant ?? (advisorCfg?.model ? undefined : variant),
           agent: next.name,
           parts,
         })
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 
-      const timeoutMs = advisorCfg?.timeout ?? DEFAULT_TIMEOUT_MS
       const runCancel = yield* EffectBridge.make()
       const cancel = ops.cancel(childSession.id)
       function onAbort() {
@@ -246,18 +340,33 @@ export const SeekAdviceTool = Tool.define(
           ),
       )
 
-      const parsed = yield* Effect.try({
-        try: () => extractJson(text),
-        catch: (error) => new Error(`Advisor did not return valid JSON: ${String(error)}`),
-      })
-      const advice = yield* decodeAdvice(parsed).pipe(
-        Effect.mapError((error) => new Error(`Advisor response failed schema validation: ${String(error)}`)),
-      )
+      const parseExit = yield* Effect.gen(function* () {
+        const parsed = yield* Effect.try({
+          try: () => extractJson(text),
+          catch: (error) => new Error(`Advisor did not return valid JSON: ${String(error)}`),
+        })
+        return yield* decodeAdvice(parsed).pipe(
+          Effect.mapError((error) => new Error(`Advisor response failed schema validation: ${String(error)}`)),
+        )
+      }).pipe(Effect.exit)
+
+      if (Exit.isSuccess(parseExit)) {
+        return {
+          title: params.question.slice(0, 80),
+          metadata,
+          output: renderAdvice(parseExit.value),
+        }
+      }
 
       return {
         title: params.question.slice(0, 80),
         metadata,
-        output: renderAdvice(advice),
+        output: [
+          `<advice confidence="unknown">`,
+          `<summary>Advisor response (unparsed)</summary>`,
+          `<raw>${text}</raw>`,
+          `</advice>`,
+        ].join("\n"),
       }
     })
 

@@ -1,0 +1,12 @@
+Analyze an image file using a vision-capable model and get a detailed text description of its contents.
+
+Use analyze_image when:
+- you need to understand what is in a screenshot, diagram, photo, or other image
+- the user asks you to look at an image and your current model does not support vision
+- you need to extract text, identify objects, or describe visual content
+
+Do NOT use analyze_image for:
+- reading text files (use read)
+- files you can already process directly
+
+The tool reads the image from disk, sends it to a configured vision model, and returns a detailed text description. The analyzer cannot edit files or run commands.

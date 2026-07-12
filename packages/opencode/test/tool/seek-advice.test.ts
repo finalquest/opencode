@@ -25,6 +25,9 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Provider } from "@/provider/provider"
+import { ProviderTest } from "../fake/provider"
+import { mockLanguageModel } from "../fake/language-model"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -294,51 +297,49 @@ describe("tool.seek_advice", () => {
     { config: { advisor: { max_calls_per_session: 1 } } },
   )
 
-  it.instance("fails on invalid JSON from advisor", () =>
+  it.instance("degrades gracefully on invalid JSON from advisor", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
       const tool = yield* SeekAdviceTool
       const def = yield* tool.init()
       const promptOps = stubOps({ text: "I think you should try option A." })
 
-      yield* assertFailsWith(
-        def.execute(baseParams, {
-          sessionID: chat.id,
-          messageID: assistant.id,
-          agent: "build",
-          abort: new AbortController().signal,
-          extra: { promptOps },
-          messages: [],
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
-        }),
-        "valid JSON",
-      )
+      const result = yield* def.execute(baseParams, {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
+
+      expect(result.output).toContain("unparsed")
+      expect(result.output).toContain("I think you should try option A.")
     }),
   )
 
-  it.instance("fails when advisor JSON fails schema validation", () =>
+  it.instance("degrades gracefully when advisor JSON fails schema validation", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
       const tool = yield* SeekAdviceTool
       const def = yield* tool.init()
-      const promptOps = stubOps({
-        text: JSON.stringify({ summary: "s", recommendation: "r", reasoning: "re", risks: [], next_steps: [] }),
+      const invalidJson = JSON.stringify({ summary: "s", recommendation: "r", reasoning: "re", risks: [], next_steps: [] })
+      const promptOps = stubOps({ text: invalidJson })
+
+      const result = yield* def.execute(baseParams, {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
       })
 
-      yield* assertFailsWith(
-        def.execute(baseParams, {
-          sessionID: chat.id,
-          messageID: assistant.id,
-          agent: "build",
-          abort: new AbortController().signal,
-          extra: { promptOps },
-          messages: [],
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
-        }),
-        "schema validation",
-      )
+      expect(result.output).toContain("unparsed")
     }),
   )
 
@@ -381,7 +382,75 @@ describe("tool.seek_advice", () => {
       expect(yield* Effect.promise(() => cancelled.promise)).toBe(input.sessionID)
 
       const exit = yield* Fiber.await(fiber)
-      expect(Exit.isFailure(exit)).toBe(true)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) expect(exit.value.output).toContain("unparsed")
+    }),
+  )
+})
+
+const providerTest = ProviderTest.fake({
+  model: ProviderTest.model({ id: ref.modelID, providerID: ref.providerID }),
+  info: ProviderTest.info({ id: ref.providerID }, ProviderTest.model({ id: ref.modelID, providerID: ref.providerID })),
+  language: mockLanguageModel({ json: adviceJson }),
+})
+
+const itProvider = testEffect(Layer.merge(layer(), providerTest.layer))
+
+describe("tool.seek_advice structured", () => {
+  itProvider.instance("uses structured path when provider is available", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* SeekAdviceTool
+      const def = yield* tool.init()
+      const promptOps = stubOps()
+
+      const result = yield* def.execute(baseParams, {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
+
+      expect(result.metadata).toHaveProperty("path", "structured")
+      expect(result.output).toContain(`<advice confidence="medium">`)
+      expect(result.output).toContain("<recommendation>Investigate the cache key path first</recommendation>")
+    }),
+  )
+})
+
+const failingProvider = ProviderTest.fake({
+  model: ProviderTest.model({ id: ref.modelID, providerID: ref.providerID }),
+  info: ProviderTest.info({ id: ref.providerID }, ProviderTest.model({ id: ref.modelID, providerID: ref.providerID })),
+  language: mockLanguageModel({ error: new Error("structured output not supported") }),
+})
+
+const itFailing = testEffect(Layer.merge(layer(), failingProvider.layer))
+
+describe("tool.seek_advice structured fallback", () => {
+  itFailing.instance("falls back to prompt when structured generation fails", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* SeekAdviceTool
+      const def = yield* tool.init()
+      const promptOps = stubOps()
+
+      const result = yield* def.execute(baseParams, {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
+
+      expect(result.metadata).toHaveProperty("path", "fallback")
+      expect(result.output).toContain(`<advice confidence="medium">`)
     }),
   )
 })

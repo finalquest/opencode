@@ -2,6 +2,7 @@ import { Effect, Layer } from "effect"
 import { Provider } from "@/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 
 export namespace ProviderTest {
   export function model(override: Partial<Provider.Model> = {}): Provider.Model {
@@ -44,7 +45,7 @@ export namespace ProviderTest {
     }
   }
 
-  export function fake(override: Partial<Provider.Interface> & { model?: Provider.Model; info?: Provider.Info } = {}) {
+  export function fake(override: Partial<Provider.Interface> & { model?: Provider.Model; info?: Provider.Info; language?: LanguageModelV3 } = {}) {
     const mdl = override.model ?? model()
     const row = override.info ?? info({}, mdl)
     return {
@@ -62,9 +63,11 @@ export namespace ProviderTest {
             if (providerID === row.id && modelID === mdl.id) return Effect.succeed(mdl)
             return Effect.die(new Error(`Unknown test model: ${providerID}/${modelID}`))
           }),
-          getLanguage: Effect.fn("TestProvider.getLanguage")(() =>
-            Effect.die(new Error("ProviderTest.getLanguage not configured")),
-          ),
+          getLanguage: override.language
+            ? Effect.fn("TestProvider.getLanguage")(() => Effect.succeed(override.language!))
+            : Effect.fn("TestProvider.getLanguage")(() =>
+                Effect.die(new Error("ProviderTest.getLanguage not configured")),
+              ),
           closest: Effect.fn("TestProvider.closest")((providerID) =>
             Effect.succeed(providerID === row.id ? { providerID: row.id, modelID: mdl.id } : undefined),
           ),

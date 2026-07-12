@@ -12,6 +12,7 @@ import { ProviderTransform } from "@/provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_ADVISOR from "./prompt/advisor.txt"
+import PROMPT_IMAGE_ANALYZER from "./prompt/image-analyzer.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
@@ -239,6 +240,22 @@ const layer = Layer.effect(
             hidden: true,
             description: "Senior technical advisor. Reasons over the conversation and recommends next steps. Cannot edit or run tools.",
             prompt: PROMPT_ADVISOR,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+              }),
+              user,
+            ),
+            options: {},
+          },
+          image_analyzer: {
+            name: "image_analyzer",
+            mode: "subagent",
+            native: true,
+            hidden: true,
+            description: "Vision-capable image analysis assistant. Describes image contents in detail. Cannot edit or run tools.",
+            prompt: PROMPT_IMAGE_ANALYZER,
             permission: Permission.merge(
               defaults,
               Permission.fromConfig({
